@@ -207,7 +207,7 @@ class MatrixClient(object):
         return self.token
 
     # TODO: combine login methods into single method controlled by kwargs
-    def login_with_password_no_sync(self, username, password):
+    def login_with_password_no_sync(self, username, password, **kwargs):
         """ Login to the homeserver.
 
         Args:
@@ -221,15 +221,17 @@ class MatrixClient(object):
             MatrixRequestError
         """
         response = self.api.login(
-            "m.login.password", user=username, password=password
+            "m.login.password", user=username, password=password, **kwargs
         )
         self.user_id = response["user_id"]
         self.token = response["access_token"]
         self.hs = response["home_server"]
+        if "device_id" in response:
+            self.device_id = response["device_id"]
         self.api.token = self.token
-        return self.token
+        return response
 
-    def login_with_password(self, username, password, limit=10):
+    def login_with_password(self, username, password, limit=10, **kwargs):
         """ Login to the homeserver.
 
         Args:
@@ -244,12 +246,12 @@ class MatrixClient(object):
         Raises:
             MatrixRequestError
         """
-        token = self.login_with_password_no_sync(username, password)
+        response = self.login_with_password_no_sync(username, password, **kwargs)
 
         """ Limit Filter """
         self.sync_filter = '{ "room": { "timeline" : { "limit" : %i } } }' % limit
         self._sync()
-        return token
+        return response
 
     def logout(self):
         """ Logout from the homeserver.
