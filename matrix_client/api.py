@@ -903,3 +903,27 @@ class MatrixHttpApi(object):
         """
         params = {"from": from_token, "to": to_token}
         return self._send("GET", "/keys/changes", query_params=params)
+
+    def send_to_devices(self, event_type, content):
+        '''
+        Args:
+            event_type (str): The event_type of the event.
+            messages (dict): {<str>: {<str>: <event_content>}}
+
+        The messages to send. A map from user ID, to a map from device ID to message body. The device ID may also be *, meaning all known devices for the user.
+        example:
+        {
+          "messages": {
+            "@alice:example.com": {
+              "TLLBEANAAG": {
+                "example_content_key": "value"
+              }
+            }
+          }
+        }'''
+        self.txn_id = self.txn_id + 1
+        return self._send("PUT",
+            "/sendToDevice/%s/%s" % (event_type, self.txn_id),
+            content=content,
+            api_path=MATRIX_UNSTABLE_API_PATH,
+        )
