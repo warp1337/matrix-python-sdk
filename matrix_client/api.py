@@ -831,3 +831,75 @@ class MatrixHttpApi(object):
             "devices": devices
         }
         return self._send("POST", "/delete_devices", content=content)
+
+    def upload_keys(self, device_keys={}, one_time_keys={}):
+        """Publishes end-to-end encryption keys for the device.
+        Said device must be the one used when logging in.
+
+        Args:
+            device_keys (dict): Optional. Identity keys for the device.
+            one_time_keys (dict): Optional. One-time public keys.
+        """
+        content = {
+            "device_keys": device_keys,
+            "one_time_keys": one_time_keys
+        }
+        return self._send("POST", "/keys/upload", content=content)
+
+    def query_user_keys(self, user_id):
+        """Query HS for public keys of all the given user devices.
+
+        Args:
+            user_id (str): The ID of the user whose devices keys to retrieve.
+        """
+        return self.query_keys({user_id: []})
+
+    def query_keys(self, user_devices, timeout=None):
+        """Query HS for public keys by user and optionally device.
+
+        Args:
+            user_devices (dict): The devices whose keys to download. Should be
+            formatted as <user_id>: [<device_ids>]. No device_ids indicates
+            all devices for the corresponding user.
+            timeout (int): Optional. The time (in milliseconds) to wait when
+            downloading keys from remote servers.
+        """
+        content = {"device_keys": user_devices}
+        if timeout:
+            content["timeout"] = timeout
+        return self._send("POST", "/keys/query", content=content)
+
+    def claim_key(self, user_id, device_id, format="curve25519"):
+        """Claims a one-time key for one device of one user.
+
+        Args:
+            user_id (str): The user ID.
+            device_id (str): The device ID.
+            format (str): Optional. The cryptographic algorithm.
+        """
+        return self.claim_keys({user_id: {device_id: format}})
+
+    def claim_keys(self, key_request, timeout=None):
+        """Claims one-time keys for use in pre-key messages.
+
+        Args:
+            key_request (dict): The keys to be claimed. Format should be
+            <user_id>: { <device_id>: <algorithm> }.
+            timeout (int): Optional. The time (in milliseconds) to wait when
+            downloading keys from remote servers.
+        """
+        content = {"one_time_keys": key_request}
+        if timeout:
+            content["timeout"] = timeout
+        return self._send("POST", "/keys/claim", content=content)
+
+    def key_changes(self, from_token, to_token):
+        """Gets a list of users who have updated their device identity keys
+        since a previous sync token.
+
+        Args:
+            from_token (str): The desired start point of the list.
+            to_token (str): The desired end point of the list.
+        """
+        params = {"from": from_token, "to": to_token}
+        return self._send("GET", "/keys/changes", query_params=params)
