@@ -17,13 +17,19 @@ class OlmDevice(object):
         api (MatrixHttpApi): The api object used to make requests.
         user_id (str): Matrix user ID. Must match the one used when logging in.
         device_id (str): Must match the one used when logging in.
+        signed_otk_proportion (float): Optional. The proportion of signed one-time keys we
+            should maintain on the HS compared to unsigned keys. The maximum value of
+            ``1`` means only signed keys will be uploaded, while the minimum value of
+            ``0`` means only unsigned keys. The actual amount of keys is determined at
+            runtime from the given proportion and the maximum number of one-time keys
+            we can physically hold.
     """
 
     _olm_algorithm = 'm.olm.v1.curve25519-aes-sha2'
     _megolm_algorithm = 'm.megolm.v1.aes-sha2'
     _algorithms = [_olm_algorithm, _megolm_algorithm]
 
-    def __init__(self, api, user_id, device_id):
+    def __init__(self, api, user_id, device_id, signed_otk_proportion=1):
         self.api = api
         check_user_id(user_id)
         self.user_id = user_id
@@ -31,6 +37,18 @@ class OlmDevice(object):
         self.olm_account = olm.Account()
         logger.info('Initialised Olm Device.')
         self.identity_keys = self.olm_account.identity_keys
+        # Try to maintain half the number of one-time keys libolm can hold uploaded
+        # on the HS. This is because some keys will be claimed by peers but not
+        # used instantly, and we want them to stay in libolm, until the limit is reached
+        # and it starts discarding keys, starting by the oldest.
+        target_keys_number = self.olm_account.max_one_time_keys // 2
+        if not 0 <= signed_otk_proportion <= 1:
+            raise ValueError('signed_otk_proportion must be between 0 and 1.')
+        self.otk_target_counts = {}
+        self.otk_target_counts['signed_curve25519'] = \
+            int(round(signed_otk_proportion * target_keys_number))
+        self.otk_target_counts['curve25519'] = \
+            int(round((1 - signed_otk_proportion) * target_keys_number))
         self.one_time_key_counts = {}
 
     def upload_identity_keys(self):
@@ -49,6 +67,52 @@ class OlmDevice(object):
         ret = self.api.upload_keys(device_keys=device_keys)
         self.one_time_key_counts = ret['one_time_key_counts']
         logger.info('Uploaded identity keys.')
+
+    def upload_one_time_keys(self, force_update=False):
+        """Uploads new one-time keys to the HS, if needed.
+
+        Args:
+            force_update (bool): Fetch the number of one-time keys currently on the HS
+                before uploading, even if we already know one. In most cases this should
+                not be necessary, as we get this value from sync responses.
+
+        Returns:
+            A dict containg the number of new keys that were uploaded for each key type
+                (signed_curve25519 or curve25519). The format is
+                ``<key_type>: <uploaded_number>``. If no keys of a given type have been
+                uploaded, the corresponding key will not be present. Consequently, an
+                empty dict indicates that no keys were uploaded.
+        """
+        if not self.one_time_key_counts or force_update:
+            self.one_time_key_counts = self.api.upload_keys()['one_time_key_counts']
+
+        keys_uploaded = {}
+        for key_type, target_number in self.otk_target_counts.items():
+            # The key_type key will not be present before our first upload
+            num_keys = self.one_time_key_counts.get(key_type, 0)
+            num_to_create = max(target_number - num_keys, 0)
+            if not num_to_create:
+                continue
+            keys_uploaded[key_type] = num_to_create
+        self.olm_account.generate_one_time_keys(sum(keys_uploaded.values()))
+
+        one_time_keys = {}
+        keys = self.olm_account.one_time_keys['curve25519']
+        for i, key_id in enumerate(keys):
+            if i < keys_uploaded.get('signed_curve25519', 0):
+                key = self.sign_json({'key': keys[key_id]})
+                key_type = 'signed_curve25519'
+            else:
+                key = keys[key_id]
+                key_type = 'curve25519'
+            one_time_keys['{}:{}'.format(key_type, key_id)] = key
+
+        ret = self.api.upload_keys(one_time_keys=one_time_keys)
+        self.one_time_key_counts = ret['one_time_key_counts']
+        self.olm_account.mark_keys_as_published()
+
+        logger.info('Uploaded new one-time keys: %s.', keys_uploaded)
+        return keys_uploaded
 
     def sign_json(self, json):
         """Signs a JSON object.
