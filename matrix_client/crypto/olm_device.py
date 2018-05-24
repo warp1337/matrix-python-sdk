@@ -1,9 +1,11 @@
 import logging
+from collections import defaultdict
 
 import olm
 from canonicaljson import encode_canonical_json
 
 from matrix_client.checks import check_user_id
+from matrix_client.crypto.device_list import DeviceList
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +64,8 @@ class OlmDevice(object):
             raise ValueError('otk_threshold must be between 0 and 1.')
         self.otk_threshold = otk_threshold
         self.one_time_key_counts = {}
+        self.device_keys = defaultdict(dict)
+        self.device_list = DeviceList(self, api, self.device_keys)
 
     def upload_identity_keys(self):
         """Uploads this device's identity keys to HS.
