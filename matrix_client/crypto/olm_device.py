@@ -371,6 +371,24 @@ class OlmDevice(object):
 
         return json.loads(event)
 
+    def olm_ensure_sessions(self, user_devices):
+        """Start Olm sessions with the given devices if one doesn't exist already.
+
+        Args:
+            user_devices (dict): A map from user ids to a list of device ids.
+
+        Raises:
+            TODO
+        """
+        user_devices_no_session = defaultdict(list)
+        for user_id in user_devices:
+            for device_id in user_devices[user_id]:
+                curve_key = self.device_keys[user_id][device_id]['curve25519']
+                if curve_key not in self.olm_sessions:
+                    user_devices_no_session[user_id].append(device_id)
+        if user_devices_no_session:
+            self.olm_start_sessions(user_devices_no_session)
+
     def sign_json(self, json):
         """Signs a JSON object.
 
