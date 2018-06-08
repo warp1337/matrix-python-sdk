@@ -616,6 +616,11 @@ class MatrixClient(object):
             self.olm_device.update_one_time_key_counts(
                 response['device_one_time_keys_count'])
 
+        if 'to_device' in response:
+            for event in response['to_device']['events']:
+                if event['type'] == 'm.room.encrypted' and self.encryption:
+                    self.olm_device.olm_handle_encrypted_event(event)
+
         for room_id, sync_room in response['rooms']['join'].items():
             if room_id not in self.rooms:
                 self._mkroom(room_id)
