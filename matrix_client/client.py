@@ -574,7 +574,15 @@ class MatrixClient(object):
             )
 
     def _mkroom(self, room_id):
-        self.rooms[room_id] = Room(self, room_id)
+        room = Room(self, room_id)
+        if self.encryption:
+            try:
+                self.api.get_encryption_algorithm(room_id)
+                room.encrypted = True
+            except MatrixRequestError as e:
+                if e.code != 404:
+                    raise
+        self.rooms[room_id] = room
         return self.rooms[room_id]
 
     def _sync(self, timeout_ms=30000):

@@ -938,6 +938,17 @@ class MatrixHttpApi(object):
             content={"messages": messages}
         )
 
+    def get_encryption_algorithm(self, room_id):
+        """Perform GET /rooms/$room_id/state/m.room.encryption
+
+        Args:
+            room_id (str): The room ID
+
+        Raises:
+            MatrixRequestError(code=404) if the room is not encrypted.
+        """
+        return self._send("GET", "/rooms/" + quote(room_id) + "/state/m.room.encryption")
+
     def _make_txn_id(self):
         txn_id = str(self.txn_id) + str(int(time() * 1000))
         self.txn_id += 1
