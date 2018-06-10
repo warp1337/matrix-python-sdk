@@ -23,13 +23,22 @@ class OlmDevice(object):
             ``0`` means only unsigned keys. The actual amount of keys is determined at
             runtime from the given proportion and the maximum number of one-time keys
             we can physically hold.
+        otk_threshold (float): Optional. Threshold below which a one-time key
+            replenishment is triggered. Must be between ``0`` and ``1``. For example,
+            ``0.1`` means that new one-time keys will be uploaded when there is less than
+            10% of the maximum number of one-time keys on the server.
     """
 
     _olm_algorithm = 'm.olm.v1.curve25519-aes-sha2'
     _megolm_algorithm = 'm.megolm.v1.aes-sha2'
     _algorithms = [_olm_algorithm, _megolm_algorithm]
 
-    def __init__(self, api, user_id, device_id, signed_otk_proportion=1):
+    def __init__(self,
+                 api,
+                 user_id,
+                 device_id,
+                 signed_otk_proportion=1,
+                 otk_threshold=0.1):
         self.api = api
         check_user_id(user_id)
         self.user_id = user_id
@@ -49,6 +58,9 @@ class OlmDevice(object):
             int(round(signed_otk_proportion * target_keys_number))
         self.otk_target_counts['curve25519'] = \
             int(round((1 - signed_otk_proportion) * target_keys_number))
+        if not 0 <= otk_threshold <= 1:
+            raise ValueError('otk_threshold must be between 0 and 1.')
+        self.otk_threshold = otk_threshold
         self.one_time_key_counts = {}
 
     def upload_identity_keys(self):
@@ -113,6 +125,24 @@ class OlmDevice(object):
 
         logger.info('Uploaded new one-time keys: %s.', keys_uploaded)
         return keys_uploaded
+
+    def update_one_time_key_counts(self, count):
+        """Update data on one-time keys count and upload new ones if necessary.
+
+        Args:
+            count (dict): Count of keys currently on the HS for each key type.
+        """
+        self.one_time_key_counts = count
+        should_upload = False
+        if not count:
+            should_upload = True
+        else:
+            for key_type, target_number in self.otk_target_counts.items():
+                if count.get(key_type, 0) < target_number * self.otk_threshold:
+                    should_upload = True
+        if should_upload:
+            logger.info('Uploading new one-time keys.')
+            self.upload_one_time_keys()
 
     def sign_json(self, json):
         """Signs a JSON object.

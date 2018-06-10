@@ -603,6 +603,10 @@ class MatrixClient(object):
             if room_id in self.rooms:
                 del self.rooms[room_id]
 
+        if self.encryption and 'device_one_time_keys_count' in response:
+            self.olm_device.update_one_time_key_counts(
+                response['device_one_time_keys_count'])
+
         for room_id, sync_room in response['rooms']['join'].items():
             if room_id not in self.rooms:
                 self._mkroom(room_id)
