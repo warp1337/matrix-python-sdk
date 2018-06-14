@@ -58,3 +58,14 @@ class MegolmOutboundSession(OutboundGroupSession):
     def encrypt(self, plaintext):
         self.message_count += 1
         return super(MegolmOutboundSession, self).encrypt(plaintext)
+
+    @classmethod
+    def from_pickle(cls, pickle, devices, max_age, max_messages, creation_time,
+                    message_count, passphrase=''):
+        session = super(MegolmOutboundSession, cls).from_pickle(pickle, passphrase)
+        session.devices = devices
+        session.max_age = max_age
+        session.max_messages = max_messages
+        session.creation_time = creation_time
+        session.message_count = message_count
+        return session
