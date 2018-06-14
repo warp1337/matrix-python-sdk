@@ -64,13 +64,15 @@ class OlmDevice(object):
         check_user_id(user_id)
         self.user_id = user_id
         self.device_id = device_id
-        self.olm_sessions = defaultdict(list)
         conf = store_conf or {}
         self.db = Store(self.device_id, **conf)
+        self.olm_sessions = defaultdict(list)
+        self.megolm_inbound_sessions = defaultdict(lambda: defaultdict(dict))
         self.olm_account = self.db.get_olm_account()
         if self.olm_account:
             if load_all:
                 self.db.load_olm_sessions(self.olm_sessions)
+                self.db.load_inbound_sessions(self.megolm_inbound_sessions)
             logger.info('Loaded Olm account from database for device %s.', device_id)
         else:
             self.olm_account = olm.Account()
@@ -88,7 +90,6 @@ class OlmDevice(object):
         self.device_keys = defaultdict(dict)
         self.device_list = DeviceList(self, api, self.device_keys)
         self.megolm_outbound_sessions = {}
-        self.megolm_inbound_sessions = defaultdict(lambda: defaultdict(dict))
         self.megolm_index_record = defaultdict(dict)
 
     def upload_identity_keys(self):
@@ -652,9 +653,13 @@ class OlmDevice(object):
         sessions = self.megolm_inbound_sessions[room_id][sender_key]
         if session_id in sessions:
             return False
+        session = self.db.get_inbound_session(room_id, sender_key, session_id, sessions)
+        if session:
+            return False
         session = olm.InboundGroupSession(session_key)
         if session.id != session_id:
             raise ValueError
+        self.db.save_inbound_session(room_id, sender_key, session)
         sessions[session_id] = session
         return True
 
@@ -685,9 +690,12 @@ class OlmDevice(object):
         try:
             session = sessions[session_id]
         except KeyError:
-            raise RuntimeError("Unable to decrypt event sent by device {} of user {}: "
-                               "The sender's device has not sent us the keys for this "
-                               "message.".format(device_id, user_id))
+            session = self.db.get_inbound_session(
+                room_id, sender_key, session_id, sessions)
+            if not session:
+                raise RuntimeError("Unable to decrypt event sent by device {} of user "
+                                   "{}: The sender's device has not sent us the keys for "
+                                   "this message.".format(device_id, user_id))
 
         try:
             decrypted_event, message_index = session.decrypt(content['ciphertext'])
