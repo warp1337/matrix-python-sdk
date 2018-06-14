@@ -8,6 +8,7 @@ from canonicaljson import encode_canonical_json
 from matrix_client.checks import check_user_id
 from matrix_client.crypto.device_list import DeviceList
 from matrix_client.crypto.megolm_outbound_session import MegolmOutboundSession
+from matrix_client.crypto.crypto_store import CryptoStore
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,11 @@ class OlmDevice(object):
             replenishment is triggered. Must be between ``0`` and ``1``. For example,
             ``0.1`` means that new one-time keys will be uploaded when there is less than
             10% of the maximum number of one-time keys on the server.
+        Store (class): Optional. Custom storage class. It should implement the same
+            methods as :class:`~matrix_client.crypto.crypto_store.CryptoStore`.
+        store_conf (dict): Optional. Configuration parameters for keys storage. Refer to
+            :func:`~matrix_client.crypto.crypto_store.CryptoStore` for supported options,
+            since it will be passed to this class.
     """
 
     _olm_algorithm = 'm.olm.v1.curve25519-aes-sha2'
@@ -42,13 +48,22 @@ class OlmDevice(object):
                  user_id,
                  device_id,
                  signed_otk_proportion=1,
-                 otk_threshold=0.1):
+                 otk_threshold=0.1,
+                 Store=CryptoStore,
+                 store_conf=None):
         self.api = api
         check_user_id(user_id)
         self.user_id = user_id
         self.device_id = device_id
-        self.olm_account = olm.Account()
-        logger.info('Initialised Olm Device.')
+        conf = store_conf or {}
+        self.db = Store(self.device_id, **conf)
+        self.olm_account = self.db.get_olm_account()
+        if self.olm_account:
+            logger.info('Loaded Olm account from database for device %s.', device_id)
+        else:
+            self.olm_account = olm.Account()
+            self.db.save_olm_account(self.olm_account)
+            logger.info('Created new Olm account for device %s.', device_id)
         self.identity_keys = self.olm_account.identity_keys
         # Try to maintain half the number of one-time keys libolm can hold uploaded
         # on the HS. This is because some keys will be claimed by peers but not
@@ -133,6 +148,7 @@ class OlmDevice(object):
         self.one_time_key_counts = ret['one_time_key_counts']
         self.olm_account.mark_keys_as_published()
 
+        self.db.save_olm_account(self.olm_account)
         logger.info('Uploaded new one-time keys: %s.', keys_uploaded)
         return keys_uploaded
 
@@ -379,6 +395,7 @@ class OlmDevice(object):
                 raise RuntimeError('Error decrypting pre-key message with new session: '
                                    '{}.'.format(e))
             self.olm_account.remove_one_time_keys(session)
+            self.db.save_olm_account(self.olm_account)
             sessions.append(session)
 
         return json.loads(event)
