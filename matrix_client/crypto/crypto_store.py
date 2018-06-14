@@ -41,8 +41,13 @@ class CryptoStore(object):
     def create_tables_if_needed(self):
         """Ensures all the tables exist."""
         c = self.conn.cursor()
+        c.execute('PRAGMA foreign_keys = ON')
         c.execute('CREATE TABLE IF NOT EXISTS accounts (device_id TEXT PRIMARY KEY,'
                   'account BLOB)')
+        c.execute('CREATE TABLE IF NOT EXISTS olm_sessions (device_id TEXT,'
+                  'session_id TEXT PRIMARY KEY, curve_key TEXT, session BLOB,'
+                  'FOREIGN KEY(device_id) REFERENCES accounts(device_id) '
+                  'ON DELETE CASCADE)')
         c.close()
         self.conn.commit()
 
@@ -89,6 +94,57 @@ class CryptoStore(object):
         c = self.conn.cursor()
         c.execute('DELETE FROM accounts WHERE device_id=?', (self.device_id,))
         c.close()
+
+    def save_olm_session(self, curve_key, session):
+        self.save_olm_sessions({curve_key: [session]})
+
+    def save_olm_sessions(self, sessions):
+        """Saves Olm sessions.
+
+        Args:
+            sessions (defaultdict(list)): A map from curve25519 keys to a list of
+                olm.Session objects.
+        """
+        c = self.conn.cursor()
+        rows = [(self.device_id, s.id, key, s.pickle(self.pickle_key))
+                for key in sessions for s in sessions[key]]
+        c.executemany('REPLACE INTO olm_sessions VALUES (?,?,?,?)', rows)
+        c.close()
+        self.conn.commit()
+
+    def load_olm_sessions(self, sessions):
+        """Loads all saved Olm sessions.
+
+        Args:
+            sessions (defaultdict(list)): A map from curve25519 keys to a list of
+                olm.Session objects, which will be populated.
+        """
+        c = self.conn.cursor()
+        rows = c.execute('SELECT curve_key, session FROM olm_sessions WHERE device_id=?',
+                         (self.device_id,))
+        for row in rows:
+            session = olm.Session.from_pickle(bytes(row[1]), self.pickle_key)
+            sessions[row[0]].append(session)
+        c.close()
+
+    def get_olm_sessions(self, curve_key):
+        """Get the Olm sessions corresponding to a device.
+
+        Args:
+            curve_key (str): The curve25519 key of the device.
+
+        Returns:
+            A list of olm.Session objects, or an empty list if none were found.
+        """
+        c = self.conn.cursor()
+        rows = c.execute(
+            'SELECT session FROM olm_sessions WHERE device_id=? AND curve_key=?',
+            (self.device_id, curve_key)
+        )
+        sessions = [olm.Session.from_pickle(bytes(row[0]), self.pickle_key)
+                    for row in rows]
+        c.close()
+        return sessions
 
     def close(self):
         self.conn.close()

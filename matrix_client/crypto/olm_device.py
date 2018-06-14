@@ -37,6 +37,9 @@ class OlmDevice(object):
         store_conf (dict): Optional. Configuration parameters for keys storage. Refer to
             :func:`~matrix_client.crypto.crypto_store.CryptoStore` for supported options,
             since it will be passed to this class.
+        load_all (bool): Optional. If True, all content of the database for the current
+            device will be loaded at once. This will increase runtime performance but
+            also launch time and memory usage.
     """
 
     _olm_algorithm = 'm.olm.v1.curve25519-aes-sha2'
@@ -50,15 +53,19 @@ class OlmDevice(object):
                  signed_otk_proportion=1,
                  otk_threshold=0.1,
                  Store=CryptoStore,
-                 store_conf=None):
+                 store_conf=None,
+                 load_all=False):
         self.api = api
         check_user_id(user_id)
         self.user_id = user_id
         self.device_id = device_id
+        self.olm_sessions = defaultdict(list)
         conf = store_conf or {}
         self.db = Store(self.device_id, **conf)
         self.olm_account = self.db.get_olm_account()
         if self.olm_account:
+            if load_all:
+                self.db.load_olm_sessions(self.olm_sessions)
             logger.info('Loaded Olm account from database for device %s.', device_id)
         else:
             self.olm_account = olm.Account()
@@ -83,7 +90,6 @@ class OlmDevice(object):
         self.one_time_key_counts = {}
         self.device_keys = defaultdict(dict)
         self.device_list = DeviceList(self, api, self.device_keys)
-        self.olm_sessions = defaultdict(list)
         self.megolm_outbound_sessions = {}
         self.megolm_inbound_sessions = defaultdict(lambda: defaultdict(dict))
         self.megolm_index_record = defaultdict(dict)
@@ -202,6 +208,7 @@ class OlmDevice(object):
                         missing[user_id] = missing_devices
             logger.warning('Failed to claim the keys of %s.', missing)
 
+        new_sessions = defaultdict(list)
         for user_id in user_devices:
             for device_id, one_time_key in keys.get(user_id, {}).items():
                 try:
@@ -221,12 +228,14 @@ class OlmDevice(object):
                                                   key_object['key'])
                     sessions = self.olm_sessions[device_keys['curve25519']]
                     sessions.append(session)
+                    new_sessions[device_keys['curve25519']].append(session)
                     logger.info('Established Olm session %s with device %s of user '
                                 '%s.', device_id, session.id, user_id)
                 else:
                     logger.warning('Signature verification for one-time key of device %s '
                                    'of user %s failed, could not start olm session.',
                                    device_id, user_id)
+        self.db.save_olm_sessions(new_sessions)
 
     def olm_build_encrypted_event(self, event_type, content, user_id, device_id):
         """Encrypt an event using Olm.
@@ -271,6 +280,7 @@ class OlmDevice(object):
             raise RuntimeError('No session for this device, could not encrypt.')
 
         encrypted_message = session.encrypt(json.dumps(payload))
+        self.db.save_olm_session(identity_key, session)
         ciphertext_payload = {
             identity_key: {
                 'type': encrypted_message.message_type,
@@ -355,11 +365,16 @@ class OlmDevice(object):
         """
 
         sessions = self.olm_sessions[sender_key]
+        if not sessions:
+            saved_sessions = self.db.get_olm_sessions(sender_key)
+            if saved_sessions:
+                sessions.extend(saved_sessions)
 
         # Try to decrypt message body using one of the known sessions for that device
         for session in sessions:
             try:
                 event = session.decrypt(olm_message)
+                self.db.save_olm_session(sender_key, session)
                 logger.info('Success decrypting Olm event using existing session %s.',
                             session.id)
                 break
@@ -396,6 +411,7 @@ class OlmDevice(object):
                                    '{}.'.format(e))
             self.olm_account.remove_one_time_keys(session)
             self.db.save_olm_account(self.olm_account)
+            self.db.save_olm_session(sender_key, session)
             sessions.append(session)
 
         return json.loads(event)
@@ -414,7 +430,11 @@ class OlmDevice(object):
             for device_id in user_devices[user_id]:
                 curve_key = self.device_keys[user_id][device_id]['curve25519']
                 if curve_key not in self.olm_sessions:
-                    user_devices_no_session[user_id].append(device_id)
+                    sessions = self.db.get_olm_sessions(curve_key)
+                    if sessions:
+                        self.olm_sessions[curve_key] = sessions
+                    else:
+                        user_devices_no_session[user_id].append(device_id)
         if user_devices_no_session:
             self.olm_start_sessions(user_devices_no_session)
 
