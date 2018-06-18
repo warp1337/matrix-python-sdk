@@ -668,6 +668,12 @@ class Room(object):
                     )
                 elif econtent["membership"] in ("leave", "kick", "invite"):
                     self._rmmembers(state_event["state_key"])
+                    if econtent["membership"] != "invite":
+                        if self.client.encryption:
+                            # Invalidate any outbound session we have in the room when
+                            # someone leaves
+                            self.client.olm_device.megolm_remove_outbound_session(
+                                self.room_id)
 
         for listener in self.state_listeners:
             if (
