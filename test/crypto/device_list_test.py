@@ -13,7 +13,7 @@ from matrix_client.room import User
 from matrix_client.errors import MatrixRequestError
 from matrix_client.crypto.device_list import (_OutdatedUsersSet as OutdatedUsersSet,
                                               _UpdateDeviceList as UpdateDeviceList)
-from test.crypto.dummy_olm_device import OlmDevice
+from test.crypto.dummy_olm_device import OlmDevice, DummyStore
 from test.response_examples import example_key_query_response
 
 HOSTNAME = 'http://example.com'
@@ -129,7 +129,8 @@ class TestDeviceList:
         def dummy_download(user_devices, since_token=None):
             assert user_devices == {self.user_id: []}
             return
-        thread = UpdateDeviceList(Condition(), outdated_users, dummy_download, set())
+        thread = UpdateDeviceList(Condition(), outdated_users, dummy_download, set(),
+                                  DummyStore())
 
         thread.start()
         event.wait()
@@ -149,7 +150,7 @@ class TestDeviceList:
             return
         error_on_first_download.c = 0
         thread = UpdateDeviceList(
-            Condition(), outdated_users, error_on_first_download, set())
+            Condition(), outdated_users, error_on_first_download, set(), DummyStore())
         thread.start()
         thread.event.wait()
         assert error_on_first_download.c == 2
@@ -158,7 +159,7 @@ class TestDeviceList:
 
         # Cover a missing branch
         thread = UpdateDeviceList(
-            Condition(), outdated_users, error_on_first_download, set())
+            Condition(), outdated_users, error_on_first_download, set(), DummyStore())
         thread.should_terminate.set()
         thread.start()
         thread.join()
@@ -240,6 +241,22 @@ class TestDeviceList:
         self.device_list.update_user_device_keys({self.alice}, since_token='dummy')
         self.device_list.update_thread.event.wait()
         assert len(responses.calls) == 1
+
+    @responses.activate
+    def test_update_after_restart(self):
+        keys_changes_url = HOSTNAME + MATRIX_V2_API_PATH + '/keys/changes'
+
+        # First launch, no sync token
+        self.device_list.update_after_restart('test')
+
+        self.device_list.db.get_sync_token = lambda: 'test'
+        responses.add(responses.GET, keys_changes_url, json={})
+        self.device_list.update_after_restart('test')
+
+        resp = {'left': 'test', 'changed': self.user_id}
+        responses.replace(responses.GET, keys_changes_url, json=resp)
+        self.device_list.tracked_user_ids.clear()
+        self.device_list.update_after_restart('test')
 
 
 def test_outdated_users_set():
