@@ -64,12 +64,14 @@ class OlmDevice(object):
         self.olm_sessions = defaultdict(list)
         self.megolm_inbound_sessions = defaultdict(lambda: defaultdict(dict))
         self.megolm_outbound_sessions = {}
+        self.device_keys = defaultdict(dict)
         self.olm_account = self.db.get_olm_account()
         if self.olm_account:
             if load_all:
                 self.db.load_olm_sessions(self.olm_sessions)
                 self.db.load_inbound_sessions(self.megolm_inbound_sessions)
                 self.db.load_outbound_sessions(self.megolm_outbound_sessions)
+                self.db.load_device_keys(self.device_keys)
             logger.info('Loaded Olm account from database for device %s.', device_id)
         else:
             self.olm_account = olm.Account()
@@ -92,8 +94,7 @@ class OlmDevice(object):
             raise ValueError('otk_threshold must be between 0 and 1.')
         self.otk_threshold = otk_threshold
         self.one_time_key_counts = {}
-        self.device_keys = defaultdict(dict)
-        self.device_list = DeviceList(self, api, self.device_keys)
+        self.device_list = DeviceList(self, api, self.device_keys, self.db)
         self.megolm_index_record = defaultdict(dict)
 
     def upload_identity_keys(self):
@@ -456,9 +457,9 @@ class OlmDevice(object):
                     session.id, room.room_id)
 
         users = room.get_joined_members()
+        self.device_list.get_room_device_keys(room)
         user_devices = {user.user_id: list(self.device_keys[user.user_id])
                         for user in users}
-        self.device_list.get_room_device_keys(room)
         self.db.remove_outbound_session(room.room_id)
         self.db.save_outbound_session(room.room_id, session)
         self.megolm_share_session(room.room_id, user_devices, session)
