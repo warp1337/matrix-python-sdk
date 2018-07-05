@@ -661,9 +661,8 @@ class OlmDevice(object):
         sessions = self.megolm_inbound_sessions[room_id][sender_key]
         if session_id in sessions:
             return False
-        session = self.db.get_inbound_session(room_id, sender_key)
+        session = self.db.get_inbound_session(room_id, sender_key, session_id, sessions)
         if session:
-            sessions[session.id] = session
             return False
         session = olm.InboundGroupSession(session_key)
         self.db.save_inbound_session(room_id, sender_key, session)
@@ -697,10 +696,9 @@ class OlmDevice(object):
         try:
             session = sessions[session_id]
         except KeyError:
-            session = self.db.get_inbound_session(room_id, sender_key)
-            if session:
-                sessions[session.id] = session
-            else:
+            session = self.db.get_inbound_session(
+                room_id, sender_key, session_id, sessions)
+            if not session:
                 raise RuntimeError("Unable to decrypt event sent by device {} of user "
                                    "{}: The sender's device has not sent us the keys for "
                                    "this message.".format(device_id, user_id))

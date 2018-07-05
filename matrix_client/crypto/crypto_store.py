@@ -221,12 +221,15 @@ class CryptoStore(object):
             sessions[row[0]][row[1]][session.id] = session
         c.close()
 
-    def get_inbound_session(self, room_id, curve_key):
+    def get_inbound_session(self, room_id, curve_key, session_id, sessions=None):
         """Gets a saved inbound Megolm session.
 
         Args:
             room_id (str): The room corresponding to the session.
             curve_key (str): The curve25519 key of the device.
+            session_id (str): The id of the session.
+            sessions (dict): Optional. A map from session id to olm.InboundGroupSession
+                object, to which the session will be added.
 
         Returns:
             olm.InboundGroupSession object, or None if the session was not found.
@@ -234,7 +237,8 @@ class CryptoStore(object):
         c = self.conn.cursor()
         c.execute(
             'SELECT session FROM megolm_inbound_sessions WHERE device_id=? AND room_id=? '
-            'AND curve_key=?', (self.device_id, room_id, curve_key)
+            'AND curve_key=? AND session_id=?',
+            (self.device_id, room_id, curve_key, session_id)
         )
         try:
             session_data = c.fetchone()[0]
@@ -243,7 +247,10 @@ class CryptoStore(object):
             return None
         finally:
             c.close()
-        return olm.InboundGroupSession.from_pickle(session_data, self.pickle_key)
+        session = olm.InboundGroupSession.from_pickle(session_data, self.pickle_key)
+        if sessions is not None:
+            sessions[session.id] = session
+        return session
 
     def save_outbound_session(self, room_id, session):
         """Saves a Megolm outbound session.
