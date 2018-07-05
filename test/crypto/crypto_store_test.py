@@ -116,13 +116,14 @@ class TestCryptoStore(object):
 
         self.store.load_inbound_sessions(sessions)
         assert not sessions
-        assert not self.store.get_inbound_session(self.room_id, curve_key)
+        assert not self.store.get_inbound_session(self.room_id, curve_key, session.id)
 
         self.store.save_inbound_session(self.room_id, curve_key, session)
         self.store.load_inbound_sessions(sessions)
         assert sessions[self.room_id][curve_key][session.id].id == session.id
 
-        saved_session = self.store.get_inbound_session(self.room_id, curve_key)
+        saved_session = self.store.get_inbound_session(self.room_id, curve_key,
+                                                       session.id)
         assert saved_session.id == session.id
 
         assert not device.megolm_inbound_sessions
@@ -150,7 +151,7 @@ class TestCryptoStore(object):
             session.id
 
         self.store.remove_olm_account()
-        assert not self.store.get_inbound_session(self.room_id, curve_key)
+        assert not self.store.get_inbound_session(self.room_id, curve_key, session.id)
 
     @pytest.mark.usefixtures('account')
     def test_megolm_outbound_persistence(self, device):
