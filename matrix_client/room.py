@@ -659,14 +659,18 @@ class Room(object):
                     self.encrypted = True
             elif etype == "m.room.member" and clevel == clevel.ALL:
                 # tracking room members can be large e.g. #matrix:matrix.org
+                user_id = state_event["state_key"]
                 if econtent["membership"] == "join":
                     self._mkmembers(
                         User(self.client.api,
-                             state_event["state_key"],
+                             user_id,
                              econtent.get("displayname"))
                     )
+                    if self.client._encryption and self.encrypted:
+                        # Track the device list of this user
+                        self.client.olm_device.device_list.track_user_no_download(user_id)
                 elif econtent["membership"] in ("leave", "kick", "invite"):
-                    self._rmmembers(state_event["state_key"])
+                    self._rmmembers(user_id)
 
         for listener in self.state_listeners:
             if (
