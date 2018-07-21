@@ -378,14 +378,15 @@ class OlmDevice(object):
 
         Args:
             user_devices (dict): A map from user ids to a list of device ids.
-
-        Raises:
-            TODO
         """
         user_devices_no_session = defaultdict(list)
         for user_id in user_devices:
             for device_id in user_devices[user_id]:
                 curve_key = self.device_keys[user_id][device_id]['curve25519']
+                # Check if we have a list of sessions for this device, which can be
+                # empty. Implicitely, an empty list will indicate that we already tried
+                # to establish a session with a device, but this attempt was
+                # unsuccessful. We do not retry to establish a session.
                 if curve_key not in self.olm_sessions:
                     user_devices_no_session[user_id].append(device_id)
         if user_devices_no_session:
