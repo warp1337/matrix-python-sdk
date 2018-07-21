@@ -191,6 +191,10 @@ class TestCryptoStore(object):
         assert saved_session.message_count == session.message_count
         assert saved_session.max_age == session.max_age
 
+        sessions.clear()
+        saved_session = self.store.get_outbound_session(self.room_id, sessions)
+        assert sessions[self.room_id].id == session.id
+
         self.store.remove_outbound_session(self.room_id)
         assert not self.store.get_outbound_session(self.room_id)
 
