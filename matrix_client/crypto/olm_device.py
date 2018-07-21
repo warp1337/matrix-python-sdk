@@ -535,10 +535,8 @@ class OlmDevice(object):
 
         session = self.megolm_outbound_sessions.get(room_id)
         if not session:
-            session = self.db.get_outbound_session(room_id)
-            if session:
-                self.megolm_outbound_sessions[room_id] = session
-            else:
+            session = self.db.get_outbound_session(room_id, self.megolm_outbound_sessions)
+            if not session:
                 session = self.megolm_start_session(room)
         if session.should_rotate():
             session = self.megolm_start_session(room)
