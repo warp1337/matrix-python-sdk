@@ -78,7 +78,7 @@ class TestCryptoStore(object):
 
         self.store.load_olm_sessions(sessions)
         assert not sessions
-        assert self.store.get_olm_sessions(curve_key) == []
+        assert not self.store.get_olm_sessions(curve_key)
 
         self.store.save_olm_session(curve_key, session)
         self.store.load_olm_sessions(sessions)
@@ -86,6 +86,10 @@ class TestCryptoStore(object):
 
         saved_sessions = self.store.get_olm_sessions(curve_key)
         assert saved_sessions[0].id == session.id
+
+        sessions.clear()
+        saved_sessions = self.store.get_olm_sessions(curve_key, sessions)
+        assert sessions[curve_key][0].id == session.id
 
         # Replace the session when its internal state has changed
         pickle = session.pickle()
@@ -107,7 +111,7 @@ class TestCryptoStore(object):
 
         # Test cascade deletion
         self.store.remove_olm_account()
-        assert self.store.get_olm_sessions(curve_key) == []
+        assert not self.store.get_olm_sessions(curve_key)
 
     def test_megolm_inbound_persistence(self, curve_key, device):
         out_session = olm.OutboundGroupSession()
