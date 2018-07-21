@@ -168,14 +168,20 @@ class CryptoStore(object):
             sessions[row[0]].append(session)
         c.close()
 
-    def get_olm_sessions(self, curve_key):
+    def get_olm_sessions(self, curve_key, sessions_dict=None):
         """Get the Olm sessions corresponding to a device.
 
         Args:
             curve_key (str): The curve25519 key of the device.
+            sessions_dict (defaultdict(list)): Optional. A map from curve25519 keys to a
+                list of olm.Session objects, to which the session list will be added.
 
         Returns:
-            A list of olm.Session objects, or an empty list if none were found.
+            A list of olm.Session objects, or None if none were found.
+
+        NOTE:
+            When overriding this, be careful to append the retrieved sessions to the
+            list of sessions already present and not to overwrite its reference.
         """
         c = self.conn.cursor()
         rows = c.execute(
@@ -184,8 +190,11 @@ class CryptoStore(object):
         )
         sessions = [olm.Session.from_pickle(bytes(row[0]), self.pickle_key)
                     for row in rows]
+        if sessions_dict is not None:
+            sessions_dict[curve_key].extend(sessions)
         c.close()
-        return sessions
+        # For consistency with other get_ methods, do not return an empty list
+        return sessions or None
 
     def save_inbound_session(self, room_id, curve_key, session):
         """Saves a Megolm inbound session.

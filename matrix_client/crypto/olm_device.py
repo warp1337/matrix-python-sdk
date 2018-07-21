@@ -362,9 +362,8 @@ class OlmDevice(object):
 
         sessions = self.olm_sessions[sender_key]
         if not sessions:
-            saved_sessions = self.db.get_olm_sessions(sender_key)
-            if saved_sessions:
-                sessions.extend(saved_sessions)
+            # `sessions` should get populated by this method
+            self.db.get_olm_sessions(sender_key, self.olm_sessions)
 
         # Try to decrypt message body using one of the known sessions for that device
         for session in sessions:
@@ -427,10 +426,8 @@ class OlmDevice(object):
                 # to establish a session with a device, but this attempt was
                 # unsuccessful. We do not retry to establish a session.
                 if curve_key not in self.olm_sessions:
-                    sessions = self.db.get_olm_sessions(curve_key)
-                    if sessions:
-                        self.olm_sessions[curve_key] = sessions
-                    else:
+                    sessions = self.db.get_olm_sessions(curve_key, self.olm_sessions)
+                    if not sessions:
                         user_devices_no_session[user_id].append(device_id)
         if user_devices_no_session:
             self.olm_start_sessions(user_devices_no_session)
