@@ -308,13 +308,15 @@ class CryptoStore(object):
             sessions[row[0]] = session
         c.close()
 
-    def get_outbound_session(self, room_id):
+    def get_outbound_session(self, room_id, sessions=None):
         """Gets a saved outbound Megolm session.
 
         Also loads the devices it is shared with.
 
         Args:
             room_id (str): The room corresponding to the session.
+            sessions (dict): Optional. A map from room_id to a MegolmOutboundSession
+                object, to which the session will be added.
 
         Returns:
             MegolmOutboundSession object, or None if the session was not found.
@@ -341,6 +343,8 @@ class CryptoStore(object):
         max_age = timedelta(seconds=max_age_s)
         session = MegolmOutboundSession.from_pickle(
             session_data, devices, max_age, row[2], row[3], row[4], self.pickle_key)
+        if sessions is not None:
+            sessions[room_id] = session
         return session
 
     def remove_outbound_session(self, room_id):
