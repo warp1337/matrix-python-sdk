@@ -574,13 +574,20 @@ class OlmDevice(object):
         """
         content = event['content']
         if content['algorithm'] != self._megolm_algorithm:
+            logger.info('Ignoring unsupported algorithm %s in m.room_key event.',
+                        content['algorithm'])
             return
         user_id = event['sender']
         device_id = event['sender_device']
 
-        new = self.megolm_add_inbound_session(content['room_id'], sender_key,
-                                              content['session_id'],
-                                              content['session_key'])
+        try:
+            new = self.megolm_add_inbound_session(content['room_id'], sender_key,
+                                                  content['session_id'],
+                                                  content['session_key'])
+        except ValueError:
+            logger.warning('Session ID mismatch in m.room_key event sent by device %s '
+                           'of user %s.', device_id, user_id)
+            return
         if new:
             logger.info('Created a new Megolm inbound session with device %s of '
                         'user %s.', device_id, user_id)
@@ -599,11 +606,17 @@ class OlmDevice(object):
 
         Returns:
             True if a new session was created, False if it already existed.
+
+        Raises:
+            ValueError if ``session_id`` doesn't match the one embedded in
+            ``session_key``.
         """
         sessions = self.megolm_inbound_sessions[room_id][sender_key]
         if session_id in sessions:
             return False
         session = olm.InboundGroupSession(session_key)
+        if session.id != session_id:
+            raise ValueError
         sessions[session_id] = session
         return True
 

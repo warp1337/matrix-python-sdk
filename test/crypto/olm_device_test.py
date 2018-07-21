@@ -546,6 +546,9 @@ class TestOlmDevice:
             self.device.megolm_inbound_sessions[self.room_id][self.alice_curve_key]
         assert not self.device.megolm_add_inbound_session(
             self.room_id, self.alice_curve_key, session.id, session.session_key)
+        with pytest.raises(ValueError):
+            assert not self.device.megolm_add_inbound_session(
+                self.room_id, self.alice_curve_key, 'wrong', session.session_key)
 
     def test_handle_room_key_event(self):
         self.device.megolm_inbound_sessions.clear()
@@ -557,6 +560,10 @@ class TestOlmDevice:
 
         event = deepcopy(example_room_key_event)
         event['content']['algorithm'] = 'wrong'
+        self.device.handle_room_key_event(event, self.alice_curve_key)
+
+        event = deepcopy(example_room_key_event)
+        event['content']['session_id'] = 'wrong'
         self.device.handle_room_key_event(event, self.alice_curve_key)
 
     def test_olm_handle_encrypted_event(self):
