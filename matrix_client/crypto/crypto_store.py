@@ -270,7 +270,7 @@ CREATE TABLE IF NOT EXISTS sync_tokens(
 
         Args:
             room_id (str): The room corresponding to the session.
-            session (olm.OutboundGroupSession): The session to save.
+            session (MegolmOutboundSession): The session to save.
         """
         c = self.conn.cursor()
         pickle = session.pickle(self.pickle_key)
@@ -290,8 +290,8 @@ CREATE TABLE IF NOT EXISTS sync_tokens(
         Also loads the devices each are shared with.
 
         Args:
-            sessions (dict): A map from room_id to a ``MegolmOutboundSession`` object,
-                which will be populated.
+            sessions (dict): A map from room_id to a :class:`.MegolmOutboundSession`
+                object, which will be populated.
         """
         c = self.conn.cursor()
         rows = c.execute(
@@ -318,11 +318,13 @@ CREATE TABLE IF NOT EXISTS sync_tokens(
 
         Args:
             room_id (str): The room corresponding to the session.
-            sessions (dict): Optional. A map from room_id to a ``MegolmOutboundSession``
-                object, to which the session will be added.
+            sessions (dict): Optional. A map from room_id to a
+                :class:`.MegolmOutboundSession` object, to which the session will be
+                added.
 
         Returns:
-            ``MegolmOutboundSession`` object, or ``None`` if the session was not found.
+            :class:`.MegolmOutboundSession` object, or ``None`` if the session was
+            not found.
         """
         c = self.conn.cursor()
         c.execute(
