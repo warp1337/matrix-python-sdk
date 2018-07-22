@@ -16,6 +16,10 @@ class MegolmOutboundSession(OutboundGroupSession):
         max_messages (int): Optional. The maximum number of messages that should be sent.
             A new message in considered sent each time there is a call to ``encrypt``.
             Default to 100 if not present.
+
+    Attributes:
+        creation_time (datetime.datetime): Creation time of the session.
+        message_count (int): Number of messages encrypted using the session.
     """
 
     def __init__(self, max_age=None, max_messages=None):
