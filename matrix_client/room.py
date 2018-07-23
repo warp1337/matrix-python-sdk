@@ -48,7 +48,7 @@ class Room(object):
         self.invite_only = None
         self.guest_access = None
         self._prev_batch = None
-        self._members = []
+        self._members = {}
         self.encrypted = False
         self.rotation_period_msgs = None
         self.rotation_period_ms = None
@@ -90,17 +90,14 @@ class Room(object):
         # Member display names without me
         members = [u.get_display_name() for u in self.get_joined_members() if
                    self.client.user_id != u.user_id]
-        first_two = members[:2]
-        if len(first_two) == 1:
-            return first_two[0]
+        members.sort()
+
+        if len(members) == 1:
+            return members[0]
         elif len(members) == 2:
-            return "{0} and {1}".format(
-                first_two[0],
-                first_two[1])
+            return "{0} and {1}".format(members[0], members[1])
         elif len(members) > 2:
-            return "{0} and {1} others".format(
-                first_two[0],
-                len(members) - 1)
+            return "{0} and {1} others".format(members[0], len(members) - 1)
         else:  # len(members) <= 0 or not an integer
             # TODO i18n
             return "Empty room"
@@ -510,23 +507,21 @@ class Room(object):
     def get_joined_members(self):
         """Returns list of joined members (User objects)."""
         if self._members:
-            return self._members
+            return list(self._members.values())
         response = self.client.api.get_room_members(self.room_id)
         for event in response["chunk"]:
             if event["content"]["membership"] == "join":
-                self._mkmembers(
-                    User(self.client.api,
-                         event["state_key"],
-                         event["content"].get("displayname"))
-                )
-        return self._members
+                self._add_member(event["state_key"], event["content"].get("displayname"))
+        return list(self._members.values())
 
-    def _mkmembers(self, member):
-        if member.user_id not in [x.user_id for x in self._members]:
-            self._members.append(member)
-
-    def _rmmembers(self, user_id):
-        self._members[:] = [x for x in self._members if x.user_id != user_id]
+    def _add_member(self, user_id, displayname=None):
+        if user_id in self._members:
+            return
+        if user_id in self.client.users:
+            self._members[user_id] = self.client.users[user_id]
+            return
+        self._members[user_id] = User(self.client.api, user_id, displayname)
+        self.client.users[user_id] = self._members[user_id]
 
     def backfill_previous_messages(self, reverse=False, limit=10):
         """Backfill handling of previous messages.
@@ -715,16 +710,12 @@ class Room(object):
                 # tracking room members can be large e.g. #matrix:matrix.org
                 user_id = state_event["state_key"]
                 if econtent["membership"] == "join":
-                    self._mkmembers(
-                        User(self.client.api,
-                             user_id,
-                             econtent.get("displayname"))
-                    )
+                    self._add_member(user_id, econtent.get("displayname"))
                     if self.client._encryption and self.encrypted:
                         # Track the device list of this user
                         self.client.olm_device.device_list.track_user_no_download(user_id)
                 elif econtent["membership"] in ("leave", "kick", "invite"):
-                    self._rmmembers(user_id)
+                    self._members.pop(user_id, None)
                     if econtent["membership"] != "invite":
                         if self.client._encryption and self.encrypted:
                             # Invalidate any outbound session we have in the room when
