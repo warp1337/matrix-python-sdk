@@ -1,14 +1,18 @@
 """Tests can import OlmDevice from here, and know it won't try to use a database."""
 
+from matrix_client.crypto.crypto_store import CryptoStore
 from matrix_client.crypto.olm_device import OlmDevice as BaseOlmDevice
 
 
-class DummyStore(object):
+class DummyStore(CryptoStore):
     def __init__(*args, **kw): pass
 
     def nop(*args, **kw): pass
 
-    def __getattr__(self, _): return self.nop
+    def __getattribute__(self, name):
+        if name in dir(CryptoStore):
+            return object.__getattribute__(self, 'nop')
+        raise AttributeError
 
 
 class OlmDevice(BaseOlmDevice):
