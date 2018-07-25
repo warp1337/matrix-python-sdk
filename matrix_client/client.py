@@ -601,8 +601,11 @@ class MatrixClient(object):
 
         if 'to_device' in response:
             for event in response['to_device']['events']:
-                if event['type'] == 'm.room.encrypted' and self._encryption:
-                    self.olm_device.olm_handle_encrypted_event(event)
+                if self._encryption:
+                    if event['type'] == 'm.room.encrypted':
+                        self.olm_device.olm_handle_encrypted_event(event)
+                    elif event['type'] == 'm.room_key_request':
+                        self.olm_device.handle_key_request_event(event)
 
         if self._encryption and 'device_one_time_keys_count' in response:
             self.olm_device.update_one_time_key_counts(

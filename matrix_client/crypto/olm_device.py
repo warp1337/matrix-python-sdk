@@ -93,6 +93,7 @@ class OlmDevice(object):
                                                         keys_threshold)
         self.device_list = DeviceList(self, api, self.device_keys, self.db)
         self.megolm_index_record = defaultdict(dict)
+        self.queued_key_requests = defaultdict(list)
 
     def upload_identity_keys(self):
         """Uploads this device's identity keys to HS.
@@ -606,7 +607,7 @@ class OlmDevice(object):
         try:
             event = self.olm_decrypt_event(content, encrypted_event['sender'])
         except RuntimeError as e:
-            logger.warning('Failed to decrypt m.room_key event sent by user %s: %s',
+            logger.warning('Failed to decrypt toDevice Olm event sent by user %s: %s',
                            encrypted_event['sender'], e)
             return
 
@@ -641,6 +642,61 @@ class OlmDevice(object):
         else:
             logger.info('Inbound Megolm session with device %s of user %s '
                         'already exists.', device_id, user_id)
+
+    def handle_key_request_event(self, event):
+        """Handle a ``m.room_key_request`` event.
+
+        Args:
+            event (dict): m.room_key_request event.
+        """
+        if event['sender'] != self.user_id:
+            logger.info("Ignoring m.room_key_request event %s.", event['sender'])
+
+        content = event['content']
+        device_id = content['requesting_device_id']
+        try:
+            self.device_keys[self.user_id][device_id]
+        except KeyError:
+            logger.info("Ignoring m.room_key_request event from device %s, which"
+                        "we don't own.", device_id)
+            return
+
+        # Build a queue of key requests as we don't want to tell client of each requests,
+        # knowing that the canceling event might be coming right up next.
+        body = content['body']
+        if content['action'] == 'request':
+            if body['algorithm'] != self._megolm_algorithm:
+                continue
+            if self.queued_key_requests[device_id] is not None:
+                self.queued_key_requests[device_id].append(body)
+        elif content['action'] == 'cancel_request':
+            # Recall that this request is canceled, in case the requesting events 
+            # are processed after.
+            self.queued_key_requests[device_id] = None
+
+    def process_key_requests(self):
+        for device_id, events in self.queued_key_requests:
+            if not self.queued_key_requests[device_id]:
+                continue
+            device = self.device_keys[self.user_id][device_id]
+            for event in events:
+                session_id = event['session_id']
+                try:
+                    session = self.megolm_inbound_sessions[event['room_id']]\
+                        [event['sender_key']][session_id]
+                except KeyError:
+                    session = self.db.get_inbound_session(session_id)
+                    if not session:
+                        continue
+                # TODO automatically share with verified devices
+                else:
+                    # Callback
+        self.queued_key_requests.clear()
+
+    def build_forwarded_room_key(self, room_id, sender_key, signing_key, session):
+        # use export_session at first known index
+        # subclass InboundGroup to add forwarded curve history
+
 
     def megolm_add_inbound_session(self, room_id, sender_key, session_id, session_key):
         """Create a new Megolm inbound session if necessary.
