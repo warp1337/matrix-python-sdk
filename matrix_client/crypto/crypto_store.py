@@ -235,7 +235,7 @@ CREATE TABLE IF NOT EXISTS sync_tokens(
             sessions[row['room_id']][row['curve_key']][session.id] = session
         c.close()
 
-    def get_inbound_session(self, room_id, curve_key, session_id, sessions=None):
+    def get_inbound_session(self, session_id, sessions=None):
         """Gets a saved inbound Megolm session.
 
         Args:
@@ -250,9 +250,8 @@ CREATE TABLE IF NOT EXISTS sync_tokens(
         """
         c = self.conn.cursor()
         c.execute(
-            'SELECT session FROM megolm_inbound_sessions WHERE device_id=? AND room_id=? '
-            'AND curve_key=? AND session_id=?',
-            (self.device_id, room_id, curve_key, session_id)
+            'SELECT session FROM megolm_inbound_sessions WHERE session_id=?',
+            (session_id,)
         )
         try:
             session_data = c.fetchone()['session']
