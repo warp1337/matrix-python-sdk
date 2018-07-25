@@ -79,8 +79,8 @@ CREATE TABLE IF NOT EXISTS megolm_outbound_devices(
     megolm_outbound_sessions(device_id, room_id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS device_keys(
-    device_id TEXT, user_id TEXT, user_device_id TEXT PRIMARY KEY, ed_key TEXT,
-    curve_key TEXT,
+    device_id TEXT, user_id TEXT, user_device_id TEXT, ed_key TEXT,
+    curve_key TEXT, PRIMARY KEY(device_id, user_id, user_device_id),
     FOREIGN KEY(device_id) REFERENCES accounts(device_id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS tracked_users(
