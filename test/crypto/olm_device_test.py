@@ -42,7 +42,7 @@ class TestOlmDevice:
     alice_olm_session = olm.OutboundSession(
         device.olm_account, alice_curve_key, alice_curve_key)
     room = cli._mkroom(room_id)
-    room._members = [User(cli.api, alice)]
+    room._members[alice] = User(cli.api, alice)
     # allow to_device api call to work well with responses
     device.api._make_txn_id = lambda: 1
 

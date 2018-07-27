@@ -20,7 +20,7 @@ class TestCryptoStore(object):
     room_id = '!test:example.com'
     room = Room(None, room_id)
     user = User(None, user_id, '')
-    room._mkmembers(user)
+    room._members[user_id] = user
     db_name = 'test.db'
     db_path = mkdtemp()
     store_conf = {
