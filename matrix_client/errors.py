@@ -46,3 +46,18 @@ class MatrixHttpLibError(MatrixError):
                                                                   original_exception)
         )
         self.original_exception = original_exception
+
+
+class E2EUnknownDevices(Exception):
+    """The room contained unknown devices when sending a message.
+
+    Args:
+        user_devices (dict): A map from user_id to a list of Device objects,
+            containing the unknown devices for that user.
+    """
+
+    def __init__(self, user_devices):
+        super(Exception, self).__init__(
+            "The room contains unknown devices which have not been verified. They can "
+            "be inspected via the 'user_devices' attribute of this exception.")
+        self.user_devices = user_devices
