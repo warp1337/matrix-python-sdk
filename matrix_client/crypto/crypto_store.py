@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS megolm_outbound_devices(
 );
 CREATE TABLE IF NOT EXISTS device_keys(
     device_id TEXT, user_id TEXT, user_device_id TEXT PRIMARY KEY, ed_key TEXT,
-    curve_key TEXT,
+    curve_key TEXT, verified INTEGER, blacklisted INTEGER, ignored INTEGER,
     FOREIGN KEY(device_id) REFERENCES accounts(device_id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS tracked_users(
@@ -393,8 +393,9 @@ CREATE TABLE IF NOT EXISTS sync_tokens(
         for user_id, devices_dict in device_keys.items():
             for device_id, device in devices_dict.items():
                 rows.append((self.device_id, user_id, device_id, device.ed25519,
-                             device.curve25519))
-        c.executemany('REPLACE INTO device_keys VALUES (?,?,?,?,?)', rows)
+                             device.curve25519, device.verified, device.blacklisted,
+                             device.ignored))
+        c.executemany('REPLACE INTO device_keys VALUES (?,?,?,?,?,?,?,?)', rows)
         c.close()
         self.conn.commit()
 
@@ -409,10 +410,8 @@ CREATE TABLE IF NOT EXISTS sync_tokens(
         rows = c.execute(
             'SELECT * FROM device_keys WHERE device_id=?', (self.device_id,))
         for row in rows:
-            device = Device(api, row['user_device_id'],
-                            ed25519_key=row['ed_key'],
-                            curve25519_key=row['curve_key'])
-            device_keys[row['user_id']][row['user_device_id']] = device
+            device_keys[row['user_id']][row['user_device_id']] = \
+                self._device_from_row(row, api)
         c.close()
 
     def get_device_keys(self, api, user_devices, device_keys=None):
@@ -448,13 +447,20 @@ CREATE TABLE IF NOT EXISTS sync_tokens(
         c.close()
         result = defaultdict(dict)
         for row in rows:
-            device = Device(api, row['user_device_id'],
-                            ed25519_key=row['ed_key'],
-                            curve25519_key=row['curve_key'])
-            result[row['user_id']][row['user_device_id']] = device
+            result[row['user_id']][row['user_device_id']] = \
+                self._device_from_row(row, api)
+
         if device_keys is not None and result:
             device_keys.update(result)
         return result
+
+    @staticmethod
+    def _device_from_row(row, api):
+        return Device(
+            api, row['user_device_id'], ed25519_key=row['ed_key'],
+            curve25519_key=row['curve_key'], verified=row['verified'],
+            blacklisted=row['blacklisted'], ignored=row['ignored']
+        )
 
     def save_tracked_users(self, user_ids):
         """Saves tracked users.
