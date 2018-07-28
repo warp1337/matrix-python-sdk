@@ -42,11 +42,11 @@ class CryptoStore(object):
         self.db_filepath = os.path.join(data_dir, db_name)
 
         # Map from a thread id to a connection object
-        self._conn = defaultdict(self.instanciate_connexion)
+        self._conn = defaultdict(self.instanciate_connection)
         self.pickle_key = pickle_key
         self.create_tables_if_needed()
 
-    def instanciate_connexion(self):
+    def instanciate_connection(self):
         return sqlite3.connect(self.db_filepath, detect_types=sqlite3.PARSE_DECLTYPES)
 
     def create_tables_if_needed(self):
