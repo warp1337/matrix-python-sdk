@@ -66,6 +66,10 @@ class MatrixClient(object):
         encryption_conf (dict): Optional. Configuration parameters for encryption.
             Refer to :func:`~matrix_client.crypto.olm_device.OlmDevice` for supported
             options, since it will be passed to this class.
+        verify_devices (bool): Optional. When enabled, sending a message will fail when
+            there are unknown devices in an encrypted room. A client will have to
+            inspect those, and resend its message. Note that this can be configured later
+            on a per room basis.
 
     Returns:
         `MatrixClient`
@@ -113,7 +117,8 @@ class MatrixClient(object):
 
     def __init__(self, base_url, token=None, user_id=None,
                  valid_cert_check=True, sync_filter_limit=20,
-                 cache_level=CACHE.ALL, encryption=False, encryption_conf=None):
+                 cache_level=CACHE.ALL, encryption=False, encryption_conf=None,
+                 verify_devices=False):
         if token is not None and user_id is None:
             raise ValueError("must supply user_id along with token")
         if encryption and not ENCRYPTION_SUPPORT:
@@ -132,6 +137,7 @@ class MatrixClient(object):
         self.encryption_conf = encryption_conf or {}
         self.olm_device = None
         self.first_sync = True
+        self.verify_devices = verify_devices
         if isinstance(cache_level, CACHE):
             self._cache_level = cache_level
         else:
@@ -564,7 +570,7 @@ class MatrixClient(object):
             )
 
     def _mkroom(self, room_id):
-        room = Room(self, room_id)
+        room = Room(self, room_id, verify_devices=self.verify_devices)
         if self._encryption:
             try:
                 event = self.api.get_state_event(room_id, "m.room.encryption")
