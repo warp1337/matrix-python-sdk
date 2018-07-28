@@ -56,7 +56,8 @@ class DeviceList:
         """
         logger.info('Fetching all missing keys in room %s.', room.room_id)
         members = {m.user_id for m in room.get_joined_members()}
-        self.db.get_device_keys({m: [] for m in members}, self.device_keys)
+        missing_members = {m: [] for m in members if m not in self.device_keys}
+        self.db.get_device_keys(missing_members, self.device_keys)
         user_ids = members - self.tracked_user_ids
         if not user_ids:
             logger.info('Already had all the keys in room %s.', room.room_id)
