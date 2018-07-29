@@ -103,12 +103,6 @@ class MatrixClient(object):
 
             def global_callback(incoming_event):
                 pass
-
-    Attributes:
-        users (dict): A map from user ID to :class:`.User` object. It is populated
-            automatically while tracking the membership in rooms. Consequently, a
-            :class:`.User` object in this dict is shared between all :class:`.Room`
-            where the corresponding user is joined.
     """
 
     def __init__(self, base_url, token=None, user_id=None,
@@ -150,7 +144,7 @@ class MatrixClient(object):
         self.rooms = {
             # room_id: Room
         }
-        self.users = {
+        self._users = {
             # user_id: User
         }
         if token:
@@ -663,3 +657,14 @@ class MatrixClient(object):
             return True
         except MatrixRequestError:
             return False
+
+    @property
+    def users(self):
+        """A map from user ID to :class:`.User` object.
+
+        It is populated automatically while tracking the membership in rooms, and
+        shouldn't be modified directly.
+        A :class:`.User` object in this dict is shared between all :class:`.Room`
+        where the corresponding user is joined.
+        """
+        return self._users

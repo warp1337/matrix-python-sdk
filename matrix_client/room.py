@@ -484,11 +484,11 @@ class Room(object):
     def _add_member(self, user_id, displayname=None):
         if user_id in self._members:
             return
-        if user_id in self.client.users:
-            self._members[user_id] = self.client.users[user_id]
+        if user_id in self.client._users:
+            self._members[user_id] = self.client._users[user_id]
             return
         self._members[user_id] = User(self.client.api, user_id, displayname)
-        self.client.users[user_id] = self._members[user_id]
+        self.client._users[user_id] = self._members[user_id]
 
     def backfill_previous_messages(self, reverse=False, limit=10):
         """Backfill handling of previous messages.
