@@ -11,6 +11,8 @@ from matrix_client.crypto.device_list import DeviceList
 from matrix_client.crypto.megolm_outbound_session import MegolmOutboundSession
 from matrix_client.crypto.crypto_store import CryptoStore
 
+from matrix_client.crypto.attachment_handler import FileAttachmentHandler
+
 logger = logging.getLogger(__name__)
 
 
@@ -93,6 +95,10 @@ class OlmDevice(object):
                                                         keys_threshold)
         self.device_list = DeviceList(self, api, self.device_keys, self.db)
         self.megolm_index_record = defaultdict(dict)
+        self.attachment_handler = FileAttachmentHandler(api)
+
+    def get_attachment_handler(self):
+        return self.attachment_handler
 
     def upload_identity_keys(self):
         """Uploads this device's identity keys to HS.
@@ -730,6 +736,9 @@ class OlmDevice(object):
 
         event['type'] = decrypted_event['type']
         event['content'] = decrypted_event['content']
+        # Add content to file attachment handler, user may decide to download the content later on
+        if 'file' in event['content']:
+            self.attachment_handler.add_to_queue(event['content'])
 
     def sign_json(self, json):
         """Signs a JSON object.
